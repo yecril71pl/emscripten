@@ -3682,6 +3682,23 @@ LibraryManager.library = {
     return x.indexOf('dynCall_') == 0 || unmangledSymbols.includes(x) ? x : '_' + x;
   },
 
+  // Allocate memory for an mmap operation. This allocates space of the right
+  // page-aligned size, and clears the padding.
+  $mmapAlloc__deps: ['memalign', '$zeroMemory'],
+  $mmapAlloc: function(size) {
+#if hasExportedFunction('_memalign')
+    size = alignMemory(size, {{{ WASM_PAGE_SIZE }}});
+    var ptr = _memalign({{{ WASM_PAGE_SIZE }}}, size);
+    if (!ptr) return 0;
+    zeroMemory(ptr, size);
+    return ptr;
+#elif ASSERTIONS
+    abort('internal error: mmapAlloc called but `memalign` native symbol not exported');
+#else
+    abort();
+#endif
+  },
+
 #if RELOCATABLE
   // Globals that are normally exported from the wasm module but in relocatable
   // mode are created here and imported by the module.
