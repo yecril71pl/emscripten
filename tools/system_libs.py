@@ -773,6 +773,7 @@ class libc(AsanInstrumentedLibrary, MuslInternalLibrary, MTLibrary):
         filenames=[
           'library_pthread.c',
           'emscripten_thread_state.s',
+          'cxa_thread_atexit.c',
         ])
     else:
       ignore += ['thread']
