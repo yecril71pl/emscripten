@@ -12,7 +12,7 @@ See
 import glob
 import os
 
-from runner import RunnerCore, path_from_root
+from runner import RunnerCore, path_from_root, NON_ZERO
 from tools import config
 from tools.shared import EMCC
 import test_posixtest_browser
@@ -52,6 +52,21 @@ engine = config.NODE_JS + ['--experimental-wasm-threads', '--experimental-wasm-b
 
 # Mark certain tests as unsupported
 # TODO: Investigate failing semaphores tests.
+unsupported_noreturn = {
+  'test_pthread_kill_1_1': 'signals are not supported',
+  'test_pthread_create_1_5': 'semaphores are not supported',
+  'test_pthread_exit_6_1': 'lacking necessary mmap() support',
+  'test_pthread_spin_lock_1_1': 'signals are not supported',
+  'test_pthread_mutex_lock_5_1': 'signals are not supported',
+  'test_pthread_mutexattr_settype_2_1': 'interrupting pthread_mutex_lock wait via SIGALRM is not supported',
+  'test_pthread_spin_lock_3_1': 'signals are not supported',
+  'test_pthread_mutex_lock_3_1': 'signals are not supported',
+  'test_pthread_create_14_1': 'signals are not supported',
+  'test_pthread_detach_4_3': 'signals are not supported',
+  'test_pthread_join_6_3': 'signals are not supported',
+  'test_pthread_cond_init_4_2': 'signals are not supported',
+}
+
 unsupported = {
   'test_pthread_atfork_1_1': 'fork() and multiple processes are not supported',
   'test_pthread_atfork_1_2': 'fork() and multiple processes are not supported',
@@ -76,7 +91,6 @@ unsupported = {
   'test_pthread_cond_init_1_3': 'lacking necessary mmap() support',
   'test_pthread_cond_init_2_2': 'clock_settime() is not supported',
   'test_pthread_cond_init_4_1': 'fork() and multiple processes are not supported',
-  'test_pthread_cond_init_4_2': 'signals are not supported',
   'test_pthread_cond_signal_1_2': 'lacking necessary mmap() support',
   'test_pthread_cond_signal_4_2': 'signals are not supported',
   'test_pthread_cond_timedwait_2_4': 'lacking necessary mmap() support',
@@ -84,21 +98,15 @@ unsupported = {
   'test_pthread_cond_timedwait_4_2': 'lacking necessary mmap() support',
   'test_pthread_cond_wait_2_2': 'lacking necessary mmap() support',
   'test_pthread_cond_wait_4_1': 'fork() and multiple processes are not supported',
-  'test_pthread_create_1_5': 'semaphores are not supported',
   'test_pthread_create_1_6': 'semaphores are not supported',
   'test_pthread_create_8_1': 'signals are not supported',
   'test_pthread_create_8_2': 'signals are not supported',
   'test_pthread_create_10_1': 'signals are not supported',
-  'test_pthread_create_14_1': 'signals are not supported',
   'test_pthread_create_15_1': 'signals are not supported',
-  'test_pthread_detach_4_3': 'signals are not supported',
   'test_pthread_equal_2_1': 'signals are not supported',
-  'test_pthread_exit_6_1': 'lacking necessary mmap() support',
   'test_pthread_exit_6_2': 'semaphores are not supported',
   'test_pthread_getschedparam_1_3': 'scheduling policy/parameters are not supported',
   'test_pthread_getschedparam_4_1': 'signals are not supported',
-  'test_pthread_join_6_3': 'signals are not supported',
-  'test_pthread_kill_1_1': 'signals are not supported',
   'test_pthread_kill_1_2': 'signals are not supported',
   'test_pthread_kill_8_1': 'signals are not supported',
   'test_pthread_mutexattr_getprioceiling_1_2': 'pthread_mutexattr_setprioceiling is not supported',
@@ -107,12 +115,9 @@ unsupported = {
   'test_pthread_mutexattr_setprioceiling_3_1': 'pthread_mutexattr_setprioceiling is not supported',
   'test_pthread_mutexattr_setprioceiling_3_2': 'pthread_mutexattr_setprioceiling is not supported',
   'test_pthread_mutexattr_setprotocol_1_1': 'setting pthread_mutexattr_setprotocol to a nonzero value is not supported',
-  'test_pthread_mutexattr_settype_2_1': 'interrupting pthread_mutex_lock wait via SIGALRM is not supported',
   'test_pthread_mutex_getprioceiling_1_1': 'pthread_mutex_getprioceiling is not supported',
   'test_pthread_mutex_init_1_2': 'signals are not supported',
   'test_pthread_mutex_init_5_1': 'fork() and multiple processes are not supported',
-  'test_pthread_mutex_lock_3_1': 'signals are not supported',
-  'test_pthread_mutex_lock_5_1': 'signals are not supported',
   'test_pthread_mutex_trylock_1_2': 'lacking necessary mmap() support',
   'test_pthread_mutex_trylock_2_1': 'lacking necessary mmap() support',
   'test_pthread_mutex_trylock_4_2': 'lacking necessary mmap() support',
@@ -131,8 +136,6 @@ unsupported = {
   'test_pthread_setschedparam_5_1': 'signals are not supported',
   'test_pthread_spin_init_2_1': 'shm_open and shm_unlink are not supported',
   'test_pthread_spin_init_2_2': 'shm_open and shm_unlink are not supported',
-  'test_pthread_spin_lock_1_1': 'signals are not supported',
-  'test_pthread_spin_lock_3_1': 'signals are not supported',
 }
 
 # Mark certain tests as flaky, which may sometimes fail.
@@ -142,10 +145,16 @@ flaky = {
   'test_pthread_barrier_wait_2_1': 'flaky: https://github.com/emscripten-core/emscripten/issues/14508',
 }
 
-# Mark certain tests as not passing
+# Mark certain tests as not passing.  We have two groups: once the are
+# expected to fail and ones that we should completely skip because they
+# are either flaky or never return.
 disabled = {
-  **unsupported,
   **flaky,
+  **unsupported_noreturn,
+}
+
+expect_fail = {
+  **unsupported,
   'test_pthread_attr_setscope_5_1': 'internally skipped (PTS_UNTESTED)',
 }
 
@@ -163,11 +172,15 @@ def make_test(name, testfile, browser):
             '-sEXIT_RUNTIME',
             '-sTOTAL_MEMORY=256mb',
             '-sPTHREAD_POOL_SIZE=40']
+    if name in expect_fail:
+      returncode = NON_ZERO
+    else:
+      returncode = 0
     if browser:
-      self.btest_exit(testfile, args=args)
+      self.btest_exit(testfile, args=args, expected=returncode)
     else:
       self.run_process([EMCC, testfile, '-o', 'test.js'] + args)
-      self.run_js('test.js', engine=engine)
+      self.run_js('test.js', engine=engine, assert_returncode=returncode)
 
   return f
 
