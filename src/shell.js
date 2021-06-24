@@ -81,7 +81,7 @@ var quit_ = function(status, toThrow) {
 // Determine the runtime environment we are in. You can customize this by
 // setting the ENVIRONMENT setting at compile time (see settings.js).
 
-#if ENVIRONMENT && ENVIRONMENT.indexOf(',') < 0
+#if ENVIRONMENT && !ENVIRONMENT.includes(',')
 var ENVIRONMENT_IS_WEB = {{{ ENVIRONMENT === 'web' }}};
 #if USE_PTHREADS && ENVIRONMENT_MAY_BE_NODE
 // node+pthreads always supports workers; detect which we are at runtime
@@ -92,12 +92,23 @@ var ENVIRONMENT_IS_WORKER = {{{ ENVIRONMENT === 'worker' }}};
 var ENVIRONMENT_IS_NODE = {{{ ENVIRONMENT === 'node' }}};
 var ENVIRONMENT_IS_SHELL = {{{ ENVIRONMENT === 'shell' }}};
 #else // ENVIRONMENT
+// Attempt to auto-detect the environment
 var ENVIRONMENT_IS_WEB = typeof window === 'object';
 var ENVIRONMENT_IS_WORKER = typeof importScripts === 'function';
 // N.b. Electron.js environment is simultaneously a NODE-environment, but
 // also a web environment.
 var ENVIRONMENT_IS_NODE = typeof process === 'object' && typeof process.versions === 'object' && typeof process.versions.node === 'string';
 var ENVIRONMENT_IS_SHELL = !ENVIRONMENT_IS_WEB && !ENVIRONMENT_IS_NODE && !ENVIRONMENT_IS_WORKER;
+
+#if ASSERTIONS
+#if !ENVIRONMENT_MAY_BE_SHELL
+assert(!ENVIRONMENT_IS_SHELL, "shell environment detected but not enabled at build time.  Add 'shell' to `-s ENVIRONMENT` to enable shell support.");
+#endif
+#if !ENVIRONMENT_MAY_BE_NODE
+assert(!ENVIRONMENT_IS_NODE, "node environment detected but not enabled at build time.  Add 'node' to `-s ENVIRONMENT` to enable shell support.");
+#endif
+#endif // ASSERTIONS
+
 #endif // ENVIRONMENT
 
 #if ASSERTIONS
